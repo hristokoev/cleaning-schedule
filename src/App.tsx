@@ -16,6 +16,7 @@ const CleaningScheduleApp: React.FC = () => {
     "Sandy",
     "Kaloyan",
     "Hristo",
+    "Nick",
   ]);
 
   // State for new person input
