@@ -12,10 +12,10 @@ const CleaningScheduleApp: React.FC = () => {
   // State for list of people/rooms
   const [people, setPeople] = useState<string[]>([
     "Marco",
-    "Hristo",
-    "Kaloyan",
     "Grigorij",
     "Sandy",
+    "Kaloyan",
+    "Hristo",
   ]);
 
   // State for new person input
