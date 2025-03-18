@@ -450,6 +450,15 @@ const CleaningScheduleApp: React.FC = () => {
           </CardContent>
         </Card>
 
+        {/* Current Duty Card */}
+        <Card>
+          <div className="bg-blue-50 p-3 rounded-md">
+            <p className="text-center mt-1">
+              <strong>Current duty:</strong> {getCurrentPerson()}
+            </p>
+          </div>
+        </Card>
+
         {/* Calendar */}
         <Card>
           <CardHeader>
