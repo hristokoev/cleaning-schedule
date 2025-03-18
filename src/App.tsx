@@ -9,7 +9,7 @@ interface CalendarDay {
 }
 
 const CleaningScheduleApp: React.FC = () => {
-  // State for list of people/rooms
+  // State for list of people
   const [people, setPeople] = useState<string[]>([
     "Marco",
     "Grigorij",
@@ -24,8 +24,61 @@ const CleaningScheduleApp: React.FC = () => {
   // State for current date
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
 
+  const [startDate, setStartDate] = useState<Date>(getFixedStartDate());
+
+  // State for date picker visibility
+  const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
+
+  // State for temporary date selection in date picker
+  const [tempSelectedDate, setTempSelectedDate] = useState<Date>(
+    new Date(startDate)
+  );
+
+  // State for date picker's current month view
+  const [datePickerMonth, setDatePickerMonth] = useState<Date>(
+    new Date(startDate)
+  );
+
+  // Get a fixed start date (Jan 1, 2024 - adjust to the nearest Monday)
+  function getFixedStartDate(): Date {
+    const fixedDate = new Date(2025, 2, 17); // 17 March, 2024
+    const day = fixedDate.getDay(); // 0 is Sunday, 1 is Monday, etc.
+    const diff = fixedDate.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+    const monday = new Date(fixedDate.setDate(diff));
+    monday.setHours(0, 0, 0, 0); // Reset time part
+    return monday;
+  }
+
+  // Get this Monday's date
+  function getThisMonday(): Date {
+    const today = new Date();
+    const day = today.getDay(); // 0 is Sunday, 1 is Monday, etc.
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+    const monday = new Date(today.setDate(diff));
+    monday.setHours(0, 0, 0, 0); // Reset time part
+    return monday;
+  }
+
+  // Get the nearest Monday to a date (either the date itself if it's Monday, or the next Monday)
+  function getNearestMonday(date: Date): Date {
+    const newDate = new Date(date);
+    const day = newDate.getDay(); // 0 is Sunday, 1 is Monday, etc.
+
+    // If it's already Monday, return the date
+    if (day === 1) return newDate;
+
+    // Otherwise, find the next Monday
+    const daysUntilMonday = day === 0 ? 1 : 8 - day;
+    newDate.setDate(newDate.getDate() + daysUntilMonday);
+    newDate.setHours(0, 0, 0, 0);
+    return newDate;
+  }
+
   // State for calendar days
   const [calendarDays, setCalendarDays] = useState<CalendarDay[]>([]);
+
+  // State for date picker days
+  const [datePickerDays, setDatePickerDays] = useState<CalendarDay[]>([]);
 
   // Get the first day of the month (adjusted for Monday start)
   const getFirstDayOfMonth = (date: Date): number => {
@@ -39,33 +92,44 @@ const CleaningScheduleApp: React.FC = () => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   };
 
-  // Get person on rotation for a specific date
+  // Modified getPersonOnDuty function to fix rotation bugs
+  // This ensures each person gets exactly 2 weeks, always starting on Monday
   const getPersonOnDuty = (date: Date): string | null => {
     if (people.length === 0) return null;
 
-    // Start from the first Monday of 2025
-    const startDate = new Date(2025, 2, 12); // January 6, 2025 is a Monday
+    // Create copies of the dates and set to noon to avoid DST issues
+    const targetDate = new Date(date);
+    targetDate.setHours(12, 0, 0, 0);
+
+    const rotationStart = new Date(startDate);
+    rotationStart.setHours(12, 0, 0, 0);
+
+    // If the date is before our start date, return null
+    if (targetDate < rotationStart) return null;
+
+    // Find the Monday of the current week for this date
+    const dayOfWeek = targetDate.getDay(); // 0 is Sunday, 1 is Monday, etc.
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Adjust for Monday-based week
 
     // Find the Monday of the current week
-    const currentDate = new Date(date);
-    const currentDay = currentDate.getDay(); // 0 is Sunday, 1 is Monday, etc.
-    const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1; // Adjust for our Monday-based week
+    const thisMonday = new Date(targetDate);
+    thisMonday.setDate(targetDate.getDate() - daysFromMonday);
+    thisMonday.setHours(12, 0, 0, 0);
 
-    // Go back to the most recent Monday
-    const currentMonday = new Date(currentDate);
-    currentMonday.setDate(currentMonday.getDate() - daysFromMonday);
-    currentMonday.setHours(0, 0, 0, 0); // Reset time part
-
-    // Calculate how many days have passed from our start date to this Monday
+    // Calculate how many days from the start Monday to this Monday
     const daysSinceStart = Math.floor(
-      (currentMonday.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000)
+      (thisMonday.getTime() - rotationStart.getTime()) / (1000 * 60 * 60 * 24)
     );
 
-    // Calculate which two-week period this Monday falls into (0-based)
-    const twoWeekPeriodNumber = Math.floor(daysSinceStart / 14);
+    // Calculate how many Mondays have passed since the start date
+    // Using Math.round for more accurate calculation with potential floating point issues
+    const mondayCount = Math.round(daysSinceStart / 7);
+
+    // Each person gets exactly 2 weeks (2 Mondays)
+    const periodNumber = Math.floor(mondayCount / 2);
 
     // Determine which person is on duty for this period
-    const personIndex = twoWeekPeriodNumber % people.length;
+    const personIndex = periodNumber % people.length;
 
     return people[personIndex];
   };
@@ -96,6 +160,31 @@ const CleaningScheduleApp: React.FC = () => {
     setCalendarDays(days);
   };
 
+  // Function to generate date picker days
+  const generateDatePickerDays = (): void => {
+    const firstDayOfMonth = getFirstDayOfMonth(datePickerMonth);
+    const daysInMonth = getDaysInMonth(datePickerMonth);
+
+    const days: CalendarDay[] = [];
+
+    // Add empty cells for days before the start of the month
+    for (let i = 0; i < firstDayOfMonth; i++) {
+      days.push({ day: null, person: null });
+    }
+
+    // Add cells for each day of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(
+        datePickerMonth.getFullYear(),
+        datePickerMonth.getMonth(),
+        day
+      );
+      days.push({ day, person: null, date });
+    }
+
+    setDatePickerDays(days);
+  };
+
   // Add a new person to the rotation
   const handleAddPerson = (): void => {
     if (newPerson.trim() === "") return;
@@ -124,10 +213,29 @@ const CleaningScheduleApp: React.FC = () => {
     );
   };
 
+  // Navigate to previous month in date picker
+  const goToPreviousPickerMonth = (): void => {
+    setDatePickerMonth(
+      new Date(datePickerMonth.getFullYear(), datePickerMonth.getMonth() - 1, 1)
+    );
+  };
+
+  // Navigate to next month in date picker
+  const goToNextPickerMonth = (): void => {
+    setDatePickerMonth(
+      new Date(datePickerMonth.getFullYear(), datePickerMonth.getMonth() + 1, 1)
+    );
+  };
+
   // Update calendar when people or current date changes
   useEffect(() => {
     generateCalendarDays();
-  }, [people, currentDate]);
+  }, [people, currentDate, startDate]);
+
+  // Update date picker calendar when date picker month changes
+  useEffect(() => {
+    generateDatePickerDays();
+  }, [datePickerMonth]);
 
   // Format month and year for display
   const formatMonthYear = (date: Date): string => {
@@ -136,6 +244,8 @@ const CleaningScheduleApp: React.FC = () => {
 
   // Get today's date
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   const isToday = (date?: Date): boolean => {
     if (!date) return false;
     return (
@@ -145,11 +255,142 @@ const CleaningScheduleApp: React.FC = () => {
     );
   };
 
+  // Check if a date is a Monday
+  const isMonday = (date?: Date): boolean => {
+    if (!date) return false;
+    return date.getDay() === 1; // 1 is Monday
+  };
+
+  // Check if a date matches the selected date in the picker
+  const isSelectedDate = (date?: Date): boolean => {
+    if (!date || !tempSelectedDate) return false;
+    return (
+      date.getDate() === tempSelectedDate.getDate() &&
+      date.getMonth() === tempSelectedDate.getMonth() &&
+      date.getFullYear() === tempSelectedDate.getFullYear()
+    );
+  };
+
+  // Check if a date matches the start date
+  const isStartDate = (date?: Date): boolean => {
+    if (!date) return false;
+    return (
+      date.getDate() === startDate.getDate() &&
+      date.getMonth() === startDate.getMonth() &&
+      date.getFullYear() === startDate.getFullYear()
+    );
+  };
+
+  // Format the start date for display
+  const formatStartDate = (date: Date): string => {
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
+  // Set rotation to start from the current week's Monday
+  const handleStartFromCurrentWeek = (): void => {
+    setStartDate(getThisMonday());
+    setTempSelectedDate(getThisMonday());
+    setDatePickerMonth(getThisMonday());
+  };
+
+  // Reset to the fixed start date (Jan 1, 2024 or closest Monday)
+  const handleResetToOriginal = (): void => {
+    const fixedDate = getFixedStartDate();
+    setStartDate(fixedDate);
+    setTempSelectedDate(fixedDate);
+    setDatePickerMonth(fixedDate);
+  };
+
   // Handle keypress for adding a person
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === "Enter") {
       handleAddPerson();
     }
+  };
+
+  // Handle date selection in date picker
+  const handleDateSelection = (date?: Date): void => {
+    if (!date) return;
+    setTempSelectedDate(date);
+  };
+
+  // Apply selected date as start date
+  const applySelectedDate = (): void => {
+    // Ensure the selected date is a Monday
+    const mondayDate = getNearestMonday(tempSelectedDate);
+    setStartDate(mondayDate);
+    setTempSelectedDate(mondayDate);
+    setShowDatePicker(false);
+  };
+
+  // Close date picker without applying changes
+  const cancelDateSelection = (): void => {
+    setTempSelectedDate(startDate);
+    setDatePickerMonth(new Date(startDate));
+    setShowDatePicker(false);
+  };
+
+  // Toggle date picker visibility
+  const toggleDatePicker = (): void => {
+    if (!showDatePicker) {
+      // When opening, reset the temp date to current start date
+      setTempSelectedDate(new Date(startDate));
+      setDatePickerMonth(new Date(startDate));
+    }
+    setShowDatePicker(!showDatePicker);
+  };
+
+  // Calculate the next rotation date
+  const getNextRotationDate = (): string => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Find the Monday of the current week
+    const currentDay = today.getDay(); // 0 is Sunday, 1 is Monday, etc.
+    const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1; // Adjust for our Monday-based week
+
+    // Calculate which Monday this date belongs to
+    const thisMonday = new Date(today);
+    thisMonday.setDate(today.getDate() - daysFromMonday);
+    thisMonday.setHours(0, 0, 0, 0);
+
+    // Calculate how many days have passed from the start Monday to this Monday
+    const rotationStart = new Date(startDate);
+    rotationStart.setHours(0, 0, 0, 0);
+
+    const daysSinceStart = Math.floor(
+      (thisMonday.getTime() - rotationStart.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    // Calculate which 2-week period this Monday falls into
+    const currentPeriodNumber = Math.floor(daysSinceStart / 14);
+
+    // Calculate days passed in current period
+    const daysPassed = daysSinceStart - currentPeriodNumber * 14;
+
+    // Calculate days until next rotation
+    const daysUntilNextRotation = 14 - daysPassed;
+
+    // Calculate next rotation date (next Monday after the current rotation ends)
+    const nextRotationDate = new Date(thisMonday);
+    nextRotationDate.setDate(thisMonday.getDate() + daysUntilNextRotation);
+
+    return nextRotationDate.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
+  // Get current person on duty
+  const getCurrentPerson = (): string | null => {
+    if (people.length === 0) return null;
+    return getPersonOnDuty(new Date()) || null;
   };
 
   return (
@@ -166,7 +407,7 @@ const CleaningScheduleApp: React.FC = () => {
         {/* People Management */}
         <Card>
           <CardHeader>
-            <CardTitle>People/Rooms in Rotation</CardTitle>
+            <CardTitle>People in Rotation</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col space-y-4">
@@ -193,9 +434,9 @@ const CleaningScheduleApp: React.FC = () => {
                   value={newPerson}
                   onChange={(e) => setNewPerson(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Add person or room"
+                  placeholder="Add person"
                   className="flex-1 border rounded-l-md px-3 py-2"
-                  aria-label="Add person or room name"
+                  aria-label="Add person"
                 />
                 <button
                   onClick={handleAddPerson}
@@ -249,11 +490,20 @@ const CleaningScheduleApp: React.FC = () => {
                     min-h-16 border border-slate-300 rounded p-1 transition-colors
                     ${data.day ? "bg-white" : "bg-gray-50"}
                     ${isToday(data.date) ? "ring-2 ring-blue-400" : ""}
+                    ${isStartDate(data.date) ? "ring-2 ring-green-500" : ""}
                   `}
                 >
                   {data.day && (
                     <>
-                      <div className="text-right text-sm">{data.day}</div>
+                      <div className="text-right text-sm">
+                        {data.day}
+                        {isStartDate(data.date) && (
+                          <span
+                            className="ml-1 inline-block h-2 w-2 bg-green-500 rounded-full"
+                            title="Rotation Start Date"
+                          ></span>
+                        )}
+                      </div>
                       {data.person && (
                         <div
                           className="mt-1 text-xs rounded-md p-1 text-center overflow-hidden"
@@ -269,6 +519,164 @@ const CleaningScheduleApp: React.FC = () => {
                   )}
                 </div>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Schedule Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Schedule Settings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col space-y-4">
+              <div className="flex flex-col space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">
+                      Rotation Start Date (Monday):
+                    </p>
+                    <p className="font-medium">{formatStartDate(startDate)}</p>
+                  </div>
+                  <button
+                    onClick={toggleDatePicker}
+                    className="bg-blue-100 text-blue-800 rounded-md px-3 py-2 hover:bg-blue-200 transition-colors text-sm"
+                    aria-label="Change start date"
+                  >
+                    {showDatePicker ? "Hide Calendar" : "Change Date"}
+                  </button>
+                </div>
+
+                {/* Date Picker */}
+                {showDatePicker && (
+                  <div className="mt-3 border rounded-md shadow-lg p-3 bg-white">
+                    <div className="flex items-center justify-between mb-2">
+                      <button
+                        onClick={goToPreviousPickerMonth}
+                        className="bg-gray-200 rounded-md px-3 py-1 hover:bg-gray-300 transition-colors"
+                        aria-label="Previous month"
+                      >
+                        &lt;
+                      </button>
+                      <h3 className="font-medium">
+                        {formatMonthYear(datePickerMonth)}
+                      </h3>
+                      <button
+                        onClick={goToNextPickerMonth}
+                        className="bg-gray-200 rounded-md px-3 py-1 hover:bg-gray-300 transition-colors"
+                        aria-label="Next month"
+                      >
+                        &gt;
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-7 gap-1 mb-3">
+                      {/* Day labels */}
+                      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
+                        (day, index) => (
+                          <div
+                            key={index}
+                            className="text-center text-xs font-semibold py-1"
+                          >
+                            {day}
+                          </div>
+                        )
+                      )}
+
+                      {/* Date picker cells */}
+                      {datePickerDays.map((data, index) => (
+                        <div
+                          key={index}
+                          className={`
+                            h-8 w-8 flex items-center justify-center text-sm rounded-full mx-auto cursor-pointer transition-colors
+                            ${!data.day ? "invisible" : ""}
+                            ${
+                              isSelectedDate(data.date)
+                                ? "bg-blue-500 text-white"
+                                : ""
+                            }
+                            ${
+                              isToday(data.date) && !isSelectedDate(data.date)
+                                ? "border border-blue-300"
+                                : ""
+                            }
+                            ${
+                              isStartDate(data.date) &&
+                              !isSelectedDate(data.date)
+                                ? "ring-2 ring-blue-400"
+                                : ""
+                            }
+                            ${
+                              isMonday(data.date) && !isSelectedDate(data.date)
+                                ? "font-bold"
+                                : ""
+                            }
+                            ${
+                              data.day &&
+                              !isSelectedDate(data.date) &&
+                              !isToday(data.date)
+                                ? "hover:bg-gray-100"
+                                : ""
+                            }
+                          `}
+                          onClick={() =>
+                            data.date && handleDateSelection(data.date)
+                          }
+                        >
+                          {data.day}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <p className="text-xs italic flex items-center">
+                        <span className="h-2 w-2 rounded-full bg-blue-500 mr-1"></span>
+                        Selected date{" "}
+                        {isMonday(tempSelectedDate)
+                          ? "(Monday)"
+                          : "(Will adjust to next Monday)"}
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={cancelDateSelection}
+                          className="bg-gray-200 text-gray-800 rounded-md px-3 py-1 text-sm hover:bg-gray-300 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={applySelectedDate}
+                          className="bg-blue-500 text-white rounded-md px-3 py-1 text-sm hover:bg-blue-600 transition-colors"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex space-x-2 mt-2">
+                  <button
+                    onClick={handleStartFromCurrentWeek}
+                    className="bg-blue-500 text-white rounded-md px-3 py-2 hover:bg-blue-600 transition-colors text-sm"
+                    aria-label="Start from current week"
+                  >
+                    Start from Current Week
+                  </button>
+                  <button
+                    onClick={handleResetToOriginal}
+                    className="bg-gray-500 text-white rounded-md px-3 py-2 hover:bg-gray-600 transition-colors text-sm"
+                    aria-label="Reset to original date"
+                  >
+                    Reset to Original
+                  </button>
+                </div>
+              </div>
+              <div className="bg-blue-50 p-3 rounded-md">
+                <p className="text-sm mt-1">
+                  <strong>Current duty:</strong> {getCurrentPerson()}
+                </p>
+                <p className="text-sm mt-1">
+                  <strong>Next rotation:</strong> {getNextRotationDate()}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
