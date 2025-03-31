@@ -345,49 +345,6 @@ const CleaningScheduleApp: React.FC = () => {
     setShowDatePicker(!showDatePicker);
   };
 
-  // Calculate the next rotation date
-  const getNextRotationDate = (): string => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Find the Monday of the current week
-    const currentDay = today.getDay(); // 0 is Sunday, 1 is Monday, etc.
-    const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1; // Adjust for our Monday-based week
-
-    // Calculate which Monday this date belongs to
-    const thisMonday = new Date(today);
-    thisMonday.setDate(today.getDate() - daysFromMonday);
-    thisMonday.setHours(0, 0, 0, 0);
-
-    // Calculate how many days have passed from the start Monday to this Monday
-    const rotationStart = new Date(startDate);
-    rotationStart.setHours(0, 0, 0, 0);
-
-    const daysSinceStart = Math.floor(
-      (thisMonday.getTime() - rotationStart.getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    // Calculate which 2-week period this Monday falls into
-    const currentPeriodNumber = Math.floor(daysSinceStart / 14);
-
-    // Calculate days passed in current period
-    const daysPassed = daysSinceStart - currentPeriodNumber * 14;
-
-    // Calculate days until next rotation
-    const daysUntilNextRotation = 14 - daysPassed;
-
-    // Calculate next rotation date (next Monday after the current rotation ends)
-    const nextRotationDate = new Date(thisMonday);
-    nextRotationDate.setDate(thisMonday.getDate() + daysUntilNextRotation);
-
-    return nextRotationDate.toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
-
   // Get current person on duty
   const getCurrentPerson = (): string | null => {
     if (people.length === 0) return null;
@@ -682,9 +639,6 @@ const CleaningScheduleApp: React.FC = () => {
               <div className="bg-blue-50 p-3 rounded-md">
                 <p className="text-sm mt-1">
                   <strong>Current duty:</strong> {getCurrentPerson()}
-                </p>
-                <p className="text-sm mt-1">
-                  <strong>Next rotation:</strong> {getNextRotationDate()}
                 </p>
               </div>
             </div>
